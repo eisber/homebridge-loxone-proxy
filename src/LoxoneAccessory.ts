@@ -6,6 +6,7 @@ export class LoxoneAccessory {
   Accessory: PlatformAccessory | undefined;
   Service: Record<string, unknown> = {};
   ItemStates: Record<string, { service: string; state: string }> = {};
+  private displayNameCount: Record<string, number> = {}; // for name uniqueness
 
   constructor(readonly platform: LoxonePlatform, readonly device: Control) {
     if (this.platform.AccessoryCount >= 149) {
@@ -45,7 +46,7 @@ export class LoxoneAccessory {
     const roomName = this.device.room ?? 'Unknown';
 
     if (!accessory) {
-      const uniqueName = this.platform.generateUniqueName(roomName, baseName);
+      const uniqueName = this.generateUniqueName(roomName, baseName);
       accessory = new this.platform.api.platformAccessory(uniqueName, uuid);
 
       this.platform.api.registerPlatformAccessories('homebridge-loxone-proxy', 'LoxonePlatform', [accessory]);
@@ -86,6 +87,9 @@ export class LoxoneAccessory {
     }
   }
 
+  /** 
+   * Centralized callback handler for Loxone state changes
+   */
   private callBack = (message: { uuid: string; state: string; service: string; value: string | number }): void => {
     if (message.uuid) {
       const itemState = this.ItemStates[message.uuid];
@@ -95,14 +99,49 @@ export class LoxoneAccessory {
     }
   };
 
+  /** 
+   * Override this in subclasses to handle state updates
+  */
   protected callBackHandler(message: { uuid: string; state: string; service: string; value: string | number }): void {
     this.platform.log.debug(`[${this.device.name}] Callback service: ${message.service}`);
     const updateService = new Function('message', `return this.Service["${message.service}"].updateService(message);`);
     updateService.call(this, message);
   }
 
+  /**
+   * Matches device names against aliases with wildcard support
+   */
   protected matchAlias(deviceName: string, alias: string): boolean {
     const aliasRegex = alias.trim().replace(/%/g, '.*').replace(/\s+/g, '\\s*');
     return new RegExp(aliasRegex, 'i').test(deviceName.trim());
+  }
+
+  /**
+   * Sanitizes names by stripping invalid characters and excess spaces
+   */
+  public sanitizeName(name: string): string {
+    return name
+      .replace(/[^a-zA-Z0-9\s']/g, '')
+      .trim()
+      .replace(/\s+/g, ' ');
+  }
+
+  /**
+   * Ensures the generated name is unique per room/item combo (adds _1, _2 if needed)
+   */
+  public generateUniqueName(room: string, base: string): string {
+    const sanitizedRoom = this.sanitizeName(room || 'Unknown');
+    const sanitizedBase = this.sanitizeName(base || 'Unnamed');
+    const fullBase = `${sanitizedRoom} ${sanitizedBase}`;
+    let finalName = fullBase;
+
+    if (this.displayNameCount[fullBase] !== undefined) {
+      this.displayNameCount[fullBase]++;
+      finalName = `${fullBase}_${this.displayNameCount[fullBase]}`;
+    } else {
+      this.displayNameCount[fullBase] = 0;
+    }
+
+    return finalName;
   }
 }

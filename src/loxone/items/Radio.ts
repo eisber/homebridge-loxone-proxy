@@ -25,7 +25,7 @@ export class Radio extends LoxoneAccessory {
 
     for (const radioSwitchKey in this.device.details.outputs) {
       const rawName = this.device.details.outputs[radioSwitchKey];
-      const uniqueName = this.platform.generateUniqueName(this.device.room, rawName);
+      const uniqueName = this.generateUniqueName(this.device.room, rawName);
 
       const radioItem = {
         ...this.device,
