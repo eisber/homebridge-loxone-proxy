@@ -51,12 +51,12 @@ export class IntercomV2 extends Intercom {
     const uuidPrefix = this.device.details.deviceUuid!.split('-')[0];
 
     // Find all device UUIDs that share the same prefix
-    const matchingUuids = Object.keys(this.platform.LoxoneItems)
+    const matchingUuids = Object.keys(this.platform.LoxoneHandler.LoxoneItems)
       .filter(uuid => uuid.startsWith(uuidPrefix));
 
     if (matchingUuids.length > 0) {
       const targetUuid = matchingUuids[0]; // Assumes first match is correct
-      const device = this.platform.LoxoneItems[targetUuid];
+      const device = this.platform.LoxoneHandler.LoxoneItems[targetUuid];
 
       this.platform.log.debug(`[${this.device.name}] Found matching Loxone IntercomV2 MotionSensor`);
 

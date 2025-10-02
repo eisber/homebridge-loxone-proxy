@@ -13,7 +13,7 @@ export class Thermostat extends BaseService {
     TargetHeatingCoolingState: 3, // 0 = Off / 1 = Heat / 2 = Cool / 3 = Auto
     CurrentTemperature: 15,
     TargetTemperature: 15,
-    TemperatureDisplayUnits: this.platform.msInfo.tempUnit, // The temperature unit in use by this Miniserver
+    TemperatureDisplayUnits: this.platform.LoxoneHandler.msInfo.tempUnit, // The temperature unit in use by this Miniserver
   };
 
   setupService() {
