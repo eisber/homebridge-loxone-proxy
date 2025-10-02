@@ -8,7 +8,7 @@ import {
   Characteristic,
 } from 'homebridge';
 
-import { StructureFile, Controls, MSInfo, Control, Room, CatValue } from './loxone/StructureFile';
+import { Control } from './loxone/StructureFile';
 import LoxoneHandler from './loxone/LoxoneHandler';
 
 /**
@@ -18,13 +18,11 @@ import LoxoneHandler from './loxone/LoxoneHandler';
 export class LoxonePlatform implements DynamicPlatformPlugin {
   public LoxoneHandler;
   public AccessoryCount = 1;
-  public msInfo: MSInfo = {} as MSInfo;
-  public LoxoneItems: Controls = {} as Controls;
+ 
   public readonly Service: typeof Service = this.api.hap.Service;
   public readonly Characteristic: typeof Characteristic = this.api.hap.Characteristic;
   public readonly accessories: PlatformAccessory[] = []; // restored cached accessories
   public mappedAccessories = new Set<string>(); // tracking of mapped UUIDs
-  private displayNameCount: Record<string, number> = {}; // for name uniqueness
 
   constructor(
     public readonly log: Logger,
@@ -41,45 +39,9 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
    */
   async LoxoneInit(): Promise<void> {
     this.LoxoneHandler = new LoxoneHandler(this);
-    await this.waitForLoxoneConfig();
-    this.log.debug(`[LoxoneInit] Got Structure File; Last modified on ${this.LoxoneHandler.loxdata.lastModified}`);
-    this.parseLoxoneConfig(this.LoxoneHandler.loxdata);
-    this.log.info('[LoxoneInit] Loxone Platform initialized successfully');
-  }
-
-  /**
-   * Waits until the structure file is received from Loxone
-   */
-  waitForLoxoneConfig(): Promise<void> {
-    return new Promise<void>((resolve) => {
-      const waitInterval = setInterval(() => {
-        if (this.LoxoneHandler.loxdata) {
-          clearInterval(waitInterval);
-          resolve();
-        }
-      }, 1000);
-    });
-  }
-
-  /**
-   * Parses the structure file and begins item mapping
-   */
-  parseLoxoneConfig(config: StructureFile): void {
-    this.msInfo = config.msInfo;
-    const LoxoneRooms: Record<string, Room> = { ...config.rooms };
-    const LoxoneCats: Record<string, CatValue> = { ...config.cats };
-    this.LoxoneItems = { ...config.controls };
-
-    for (const uuid in this.LoxoneItems) {
-      const Item = this.LoxoneItems[uuid];
-      Item.room = LoxoneRooms[Item.room]?.name || 'undefined';
-      Item.catIcon = LoxoneCats[Item.cat]?.image || 'undefined';
-      Item.cat = LoxoneCats[Item.cat]?.type || 'undefined';
-    }
-
-    this.mapLoxoneItems(Object.values(this.LoxoneItems)).then(() => {
-      this.removeUnmappedAccessories();
-    });
+    await this.LoxoneHandler.connect(); // handles login and loads structureFile
+    await this.mapLoxoneItems(Object.values(this.LoxoneHandler.LoxoneItems)); // Begin mapping items to accessories
+    this.removeUnmappedAccessories(); // Clean up any unmapped accessories  
   }
 
   /**
@@ -149,34 +111,5 @@ export class LoxonePlatform implements DynamicPlatformPlugin {
   configureAccessory(accessory: PlatformAccessory): void {
     this.log.debug('Loading accessory from cache:', accessory.displayName);
     this.accessories.push(accessory);
-  }
-
-  /**
-   * Sanitizes names by stripping invalid characters and excess spaces
-   */
-  public sanitizeName(name: string): string {
-    return name
-      .replace(/[^a-zA-Z0-9\s']/g, '')
-      .trim()
-      .replace(/\s+/g, ' ');
-  }
-
-  /**
-   * Ensures the generated name is unique per room/item combo (adds _1, _2 if needed)
-   */
-  public generateUniqueName(room: string, base: string): string {
-    const sanitizedRoom = this.sanitizeName(room || 'Unknown');
-    const sanitizedBase = this.sanitizeName(base || 'Unnamed');
-    const fullBase = `${sanitizedRoom} ${sanitizedBase}`;
-    let finalName = fullBase;
-
-    if (this.displayNameCount[fullBase] !== undefined) {
-      this.displayNameCount[fullBase]++;
-      finalName = `${fullBase}_${this.displayNameCount[fullBase]}`;
-    } else {
-      this.displayNameCount[fullBase] = 0;
-    }
-
-    return finalName;
   }
 }

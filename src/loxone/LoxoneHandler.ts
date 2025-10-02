@@ -1,33 +1,34 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
-/* eslint-disable @typescript-eslint/no-explicit-any */
-import { v4 as uuidv4 } from 'uuid';
-import * as LxCommunicator from 'lxcommunicator';
 import { LoxonePlatform } from '../LoxonePlatform';
-
-const WebSocketConfig = LxCommunicator.WebSocketConfig;
+import { StructureFile, Controls, MSInfo, Control, Room, CatValue } from './StructureFile';
+import LoxoneClient from 'loxone-ts-api';
+import LoxoneValueEvent from 'loxone-ts-api/dist/LoxoneEvents/LoxoneValueEvent.js';
+import LoxoneTextEvent from 'loxone-ts-api/dist/LoxoneEvents/LoxoneTextEvent.js';
+import FileMessage from 'loxone-ts-api/dist/WebSocketMessages/FileMessage';
 
 /**
  * Represents a handler for Loxone communication.
  */
 class LoxoneHandler {
-  private socket: any;
-  private loxdata: any;
+  private loxoneClient: LoxoneClient;
+  public msInfo: MSInfo = {} as MSInfo;
+  public LoxoneItems: Controls = {} as Controls;
+  public structureFile: StructureFile | undefined;
   private log: any;
   private host: string;
   private port: number;
   private tls: boolean;
   private username: string;
   private password: string;
-  private uuidCallbacks: { [uuid: string]: ((message: string) => void)[] };
-  private uuidCache: { [uuid: string]: string };
+  private uuidCallbacks: Record<string, ((val: any) => void)[]> = {};
+  private uuidCache: Record<string, any> = {};
 
   /**
    * Creates an instance of LoxoneHandler.
    * @param {LoxonePlatform} platform - The Loxone platform instance.
    */
   constructor(platform: LoxonePlatform) {
-    this.socket = undefined;
-    this.loxdata = undefined;
+    this.LoxoneItems = {};
+    this.structureFile = undefined;
     this.log = platform.log;
     this.host = platform.config.host;
     this.port = platform.config.port;
@@ -37,146 +38,63 @@ class LoxoneHandler {
     this.uuidCallbacks = {};
     this.uuidCache = {};
 
-    this.startListener();
-  }
+    this.loxoneClient = new LoxoneClient(`${this.host}:${this.port}`, this.username, this.password, {
+      messageLogEnabled: false,
+      logAllEvents: false,
+    });
 
-  /**
-   * Starts the listener for Loxone events.
-   * @private
-   */
-  private startListener(): void {
-    if (typeof this.socket === 'undefined') {
-      const uuid = uuidv4();
+    //if (this.debug) this.loxoneClient.setLogLevel(LogLevel.DEBUG);
 
-      // choose WS or WSS depending on TLS
-      const proto = this.tls ? WebSocketConfig.protocol.WSS : WebSocketConfig.protocol.WS;
-      const webSocketConfig = new WebSocketConfig(proto,
-        uuid, 'homebridge', WebSocketConfig.permission.APP, false);
-
-      const handleAnyEvent = (uuid: string, message: any): void => {
-        if (Object.prototype.hasOwnProperty.call(this.uuidCallbacks, uuid)) {
-          // Fixes cases where returned data is not in expected structure
-          if (typeof message === 'string') {
-            if (message.includes('->')) {
-              const parts = message.split('->');
-              if (parts.length === 2) {
-                message = parts[1].trim();
-              }
-            }
-            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-            // @ts-ignore
-            message = { uuid: uuid, value: message };
-          }
-          this.uuidCallbacks[uuid].forEach(callback => callback(message));
-        }
-        this.uuidCache[uuid] = message; // store in cache
-      };
-
-      webSocketConfig.delegate = {
-        socketOnDataProgress: (socket: any, progress: string): void => {
-          this.log.debug('data progress ' + progress);
-        },
-        socketOnTokenConfirmed: (socket: any, response: any): void => {
-          this.log.debug('token confirmed');
-        },
-        socketOnTokenReceived: (socket: any, result: any): void => {
-          this.log.debug('token received');
-        },
-        socketOnConnectionClosed: (socket: any, code: string): void => {
-          this.log.info('Socket closed ' + code);
-          if (code !== LxCommunicator.SupportCode.WEBSOCKET_MANUAL_CLOSE) {
-            this.reconnect();
-          }
-        },
-        socketOnEventReceived: (socket: any, events: any, type: any): void => {
-          for (const evt of events) {
-            switch (type) {
-              case LxCommunicator.BinaryEvent.Type.EVENT:
-                handleAnyEvent(evt.uuid, evt.value);
-                handleAnyEvent(evt.uuid, evt);
-                break;
-              case LxCommunicator.BinaryEvent.Type.EVENTTEXT:
-                handleAnyEvent(evt.uuid, evt.text);
-                break;
-              case LxCommunicator.BinaryEvent.Type.WEATHER:
-                handleAnyEvent(evt.uuid, evt);
-                break;
-              default:
-                break;
-            }
-          }
-        },
-      };
-
-      this.socket = new LxCommunicator.WebSocket(webSocketConfig);
-
-      this.connect()
-        .catch(error => {
-          this.log.error('Couldn\'t open socket: ' + error);
-          this.reconnect();
-        });
-    }
+    this.loxoneClient.on('event_value', this.handleLoxoneEvent.bind(this));
+    this.loxoneClient.on('event_text', this.handleLoxoneEvent.bind(this));
   }
 
   /**
    * Connects to the Loxone Miniserver.
-   * Allows TLS hostnames like 300-400-500-600.serial.dyndns.loxonecloud.com with custom port.
-   * @private
-   * @returns {Promise<boolean>} A promise that resolves to true if the connection is successful, false otherwise.
    */
-  private async connect(): Promise<boolean> {
+  public async connect(): Promise<void> {
     this.log.info(`Trying to connect to Miniserver at ${this.host}:${this.port} (TLS=${this.tls})`);
-
-    let url: string;
-    if (this.tls) {
-      // assume host is already a valid TLS hostname; just prepend https://
-      url = `https://${this.host}`;
-      if (this.port && this.port !== 443) {
-        url += `:${this.port}`;
-      }
-    } else {
-      url = `http://${this.host}:${this.port}`;
-    }
-
-    try {
-      await this.socket.open(url, this.username, this.password);
-      const file = await this.socket.send('data/LoxAPP3.json');
-      this.loxdata = JSON.parse(file);
-      this.startBinaryStatusUpdates();
-      this.log.info('Connected to Miniserver');
-      return true;
-    } catch (error) {
-      this.log.error('Connection failed: ' + error);
-      try {
-        this.socket.close();
-      } catch { /* empty */ }
-      return false;
-    }
+    await this.loxoneClient.connect();
+    await this.parseLoxoneConfig();
+    await this.loxoneClient.enableUpdates();
+    this.log.info('[LoxoneHandler] Connected and structure file loaded');
   }
 
   /**
-   * Starts binary status updates from the Miniserver after all listeners are registered.
+   * Parses the structure file and enriches Loxone items with room and category information.
    */
-  private startBinaryStatusUpdates(): void {
-    this.log.debug('[LoxoneHandler] Enabling binary status updates...');
-    this.socket.send('jdev/sps/enablebinstatusupdate');
+  private async parseLoxoneConfig(): Promise<void> {
+    
+    const config = await this.loxoneClient.getStructureFile();
+    await this.loxoneClient.parseStructureFile(); // No real use yet. Lets see what we can do with it later.
+
+    this.msInfo = config.msInfo;
+    const LoxoneRooms: Record<string, Room> = { ...config.rooms };
+    const LoxoneCats: Record<string, CatValue> = { ...config.cats };
+    this.LoxoneItems = { ...config.controls };
+
+    for (const uuid in this.LoxoneItems) {
+      const Item = this.LoxoneItems[uuid];
+      Item.room = LoxoneRooms[Item.room]?.name || 'undefined';
+      Item.catIcon = LoxoneCats[Item.cat]?.image || 'undefined';
+      Item.cat = LoxoneCats[Item.cat]?.type || 'undefined';
+    }
   }
 
   /**
-   * Handles the reconnection to the Loxone Miniserver.
+   * Handles incoming Loxone events and dispatches them to registered callbacks.
+   * @param {LoxoneValueEvent | LoxoneTextEvent} evt - The Loxone event.
    * @private
    */
-  private reconnect(attempt = 0): void {
-    const delay = Math.min(10000 * (attempt + 1), 60000); // up to 1 min
-    this.log.info(`Reconnecting in ${delay / 1000}s...`);
-    setTimeout(async () => {
-      const success = await this.connect();
-      if (!success && attempt < 10) {
-        this.reconnect(attempt + 1);
-      } else if (!success) {
-        this.log.error('Max reconnect attempts reached');
-      }
-    }, delay);
+  private handleLoxoneEvent(evt: LoxoneValueEvent | LoxoneTextEvent) {
+    const uuid = evt.uuid.stringValue;
+    const value = (evt as any).value ?? (evt as any).text;
+    this.uuidCache[uuid] = value;
+    if (this.uuidCallbacks[uuid]) {
+      const message = { uuid, value };
+      this.uuidCallbacks[uuid].forEach(cb => cb(message));
+      this.uuidCache[uuid] = message; // store in cache
+    }
   }
 
   /**
@@ -185,6 +103,8 @@ class LoxoneHandler {
    * @param {Function} callback - The callback function to be called when an event is received for the UUID.
    */
   public registerListenerForUUID(uuid: string, callback: (message: string) => void): void {
+    this.loxoneClient.addUuidToWatchList(uuid);
+
     if (Object.prototype.hasOwnProperty.call(this.uuidCallbacks, uuid)) {
       this.uuidCallbacks[uuid].push(callback);
     } else {
@@ -201,17 +121,17 @@ class LoxoneHandler {
    * @param {string} uuid - The UUID of the device.
    * @param {string} action - The action to be performed.
    */
-  public sendCommand(uuid: string, action: string): Promise<any> {
-    return this.socket.send(`jdev/sps/io/${uuid}/${action}`, 2)
-      .catch(err => this.log.error(`sendCommand failed: ${err}`));
+  public async sendCommand(uuid: string, action: string): Promise<any> {
+    return await this.loxoneClient.control(uuid, String(action))
+      .catch((err: any) => this.log.error(`sendCommand failed: ${err}`));
   }
 
   /**
    * Gets securedDetails from item.
    * @param {string} uuid - The UUID of the device.
    */
-  public getsecuredDetails(uuid: string): Promise<string> {
-    return this.socket.send(`jdev/sps/io/${uuid}/securedDetails`);
+  public async getsecuredDetails(uuid: string): Promise<FileMessage> {
+    return await this.loxoneClient.sendFileCommand(`jdev/sps/io/${uuid}/securedDetails`);
   }
 
   /**
