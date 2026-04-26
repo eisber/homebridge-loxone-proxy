@@ -144,6 +144,10 @@
             "title": "CO2 (Will map all items matching this alias to a HomeKit CarbonDioxideSensor)",
             "type": "string"
           },
+          "CO": {
+            "title": "CO (Will map all items matching this alias to a HomeKit CarbonMonoxideSensor)",
+            "type": "string"
+          },
           "AirQuality": {
             "title": "AirQuality (Will map all items matching this alias to a HomeKit AirQualitySensor)",
             "type": "string"

@@ -18,6 +18,10 @@ class MockCharacteristic {
     return this;
   }
 
+  setProps(_props: any) {
+    return this;
+  }
+
   updateValue(v: any) {
     this.value = v;
     return this;

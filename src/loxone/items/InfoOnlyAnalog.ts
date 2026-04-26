@@ -1,6 +1,7 @@
 import { LoxoneAccessory } from '../../LoxoneAccessory';
 import { AirQualitySensor } from '../../homekit/services/AirQualitySensor';
 import { CarbonDioxideSensor } from '../../homekit/services/CarbonDioxideSensor';
+import { CarbonMonoxideSensor } from '../../homekit/services/CarbonMonoxideSensor';
 import { HumiditySensor } from '../../homekit/services/HumiditySensor';
 import { LightSensor } from '../../homekit/services/LightSensor';
 import { TemperatureSensor } from '../../homekit/services/TemperatureSensor';
@@ -21,6 +22,7 @@ export class InfoOnlyAnalog extends LoxoneAccessory {
       ['Brightness', LightSensor],
       ['Humidity', HumiditySensor],
       ['CO2', CarbonDioxideSensor],
+      ['CO', CarbonMonoxideSensor],
       ['AirQuality', AirQualitySensor],
     ]);
 
