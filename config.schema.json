@@ -139,6 +139,14 @@
           "Temperature": {
             "title": "Temperature (Will map all items starting with this alias to a HomeKit TemperatureSensor)",
             "type": "string"
+          },
+          "CO2": {
+            "title": "CO2 (Will map all items matching this alias to a HomeKit CarbonDioxideSensor)",
+            "type": "string"
+          },
+          "AirQuality": {
+            "title": "AirQuality (Will map all items matching this alias to a HomeKit AirQualitySensor)",
+            "type": "string"
           }
         }
       },
@@ -209,7 +217,9 @@
       "items": [
         "InfoOnlyAnalogAlias.Brightness",
         "InfoOnlyAnalogAlias.Humidity",
-        "InfoOnlyAnalogAlias.Temperature"
+        "InfoOnlyAnalogAlias.Temperature",
+        "InfoOnlyAnalogAlias.CO2",
+        "InfoOnlyAnalogAlias.AirQuality"
       ]
     },
     {

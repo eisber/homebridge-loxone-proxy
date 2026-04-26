@@ -1,4 +1,6 @@
 import { LoxoneAccessory } from '../../LoxoneAccessory';
+import { AirQualitySensor } from '../../homekit/services/AirQualitySensor';
+import { CarbonDioxideSensor } from '../../homekit/services/CarbonDioxideSensor';
 import { HumiditySensor } from '../../homekit/services/HumiditySensor';
 import { LightSensor } from '../../homekit/services/LightSensor';
 import { TemperatureSensor } from '../../homekit/services/TemperatureSensor';
@@ -18,12 +20,22 @@ export class InfoOnlyAnalog extends LoxoneAccessory {
       ['Temperature', TemperatureSensor],
       ['Brightness', LightSensor],
       ['Humidity', HumiditySensor],
+      ['CO2', CarbonDioxideSensor],
+      ['AirQuality', AirQualitySensor],
     ]);
 
     const formatTypeMap = new Map<string, new (platform: any, accessory: any) => any>([
       ['%.1f°', TemperatureSensor],
+      ['%.0f°', TemperatureSensor],
+      ['%.1f°C', TemperatureSensor],
+      ['%.0f°C', TemperatureSensor],
       ['%.0fLx', LightSensor],
       ['%.0f%%', HumiditySensor],
+      ['%.1f%%', HumiditySensor],
+      ['%.0fppm', CarbonDioxideSensor],
+      ['%.0f ppm', CarbonDioxideSensor],
+      ['%.0fppb', AirQualitySensor],
+      ['%.0f ppb', AirQualitySensor],
     ]);
 
     // Check for service type based on format first
@@ -37,7 +49,7 @@ export class InfoOnlyAnalog extends LoxoneAccessory {
     }
 
     // Check based on name alias mapping
-    for (const [key, alias] of Object.entries(aliases)) {
+    for (const [key, alias] of Object.entries(aliases || {})) {
       if (this.matchAlias(this.device.name, alias)) {
         const trimmedKey = key.trim();
         const serviceType = serviceTypeMap.get(trimmedKey);
