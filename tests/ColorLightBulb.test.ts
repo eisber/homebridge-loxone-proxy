@@ -38,6 +38,9 @@ describe('ColorLightBulb', () => {
       expect(service.State.Brightness).toBe(100);
       expect(service.State.On).toBe(true);
       expect(handler.commands.length).toBeGreaterThan(0);
+      // Verify a valid hsv() command is sent even when no prior color mode was set
+      const lastCmd = handler.commands[handler.commands.length - 1];
+      expect(lastCmd.command).toMatch(/^hsv\(/);
     });
 
     it('should not send command when turning on with brightness already > 0', async () => {

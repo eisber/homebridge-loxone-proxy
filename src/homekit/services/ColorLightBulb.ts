@@ -6,7 +6,7 @@ import { LightBulb } from './LightBulb';
  * Represents a color light bulb service for Homebridge.
  */
 export class ColorLightBulb extends LightBulb {
-  private lastSetMode = '';
+  private lastSetMode = 'color';
   //private lastUpdate = 0;
 
   State = {
